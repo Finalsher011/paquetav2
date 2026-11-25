@@ -1,0 +1,394 @@
+
+--[[
+    AIRFIREGUNS V2
+    Interface + ESP de teste
+    Uso: Roblox Studio, LocalScript
+]]
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
+
+local Config = {
+    BoxESP = true,
+    NameESP = true,
+    DistanceESP = true,
+    HealthESP = true,
+    MaxDistance = 1000,
+    FireChance = 75,
+    Smoothness = 35,
+    FOV = 120,
+    ESPColor = Color3.fromRGB(0, 220, 255)
+}
+
+local old = PlayerGui:FindFirstChild("AirFireGuns")
+if old then old:Destroy() end
+
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "AirFireGuns"
+GUI.ResetOnSpawn = false
+GUI.Parent = PlayerGui
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.fromOffset(560, 390)
+Main.Position = UDim2.new(0.5, -280, 0.5, -195)
+Main.BackgroundColor3 = Color3.fromRGB(17, 19, 27)
+Main.BorderSizePixel = 0
+Main.Parent = GUI
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local Header = Instance.new("TextButton")
+Header.Size = UDim2.new(1, 0, 0, 45)
+Header.BackgroundColor3 = Color3.fromRGB(28, 31, 44)
+Header.Text = "AIRFIREGUNS V2"
+Header.TextColor3 = Color3.new(1,1,1)
+Header.Font = Enum.Font.GothamBold
+Header.TextSize = 17
+Header.Parent = Main
+
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.fromOffset(35, 35)
+Close.Position = UDim2.new(1, -40, 0, 5)
+Close.Text = "X"
+Close.TextColor3 = Color3.new(1,1,1)
+Close.BackgroundColor3 = Color3.fromRGB(170, 45, 55)
+Close.Parent = Header
+
+local Minimize = Instance.new("TextButton")
+Minimize.Size = UDim2.fromOffset(35, 35)
+Minimize.Position = UDim2.new(1, -80, 0, 5)
+Minimize.Text = "-"
+Minimize.TextColor3 = Color3.new(1,1,1)
+Minimize.BackgroundColor3 = Color3.fromRGB(60, 65, 85)
+Minimize.Parent = Header
+
+local Sidebar = Instance.new("Frame")
+Sidebar.Position = UDim2.fromOffset(0, 45)
+Sidebar.Size = UDim2.new(0, 135, 1, -45)
+Sidebar.BackgroundColor3 = Color3.fromRGB(23, 25, 35)
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+
+local Content = Instance.new("ScrollingFrame")
+Content.Position = UDim2.fromOffset(145, 55)
+Content.Size = UDim2.new(1, -155, 1, -65)
+Content.BackgroundTransparency = 1
+Content.BorderSizePixel = 0
+Content.ScrollBarThickness = 3
+Content.CanvasSize = UDim2.fromOffset(0, 600)
+Content.Parent = Main
+
+local closed = false
+local minimized = false
+local connections = {}
+local drawings = {}
+
+local function track(connection)
+    table.insert(connections, connection)
+    return connection
+end
+
+-- Arrastar painel
+do
+    local dragging = false
+    local dragStart, startPos
+
+    track(Header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = Main.Position
+        end
+    end))
+
+    track(UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            Main.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end))
+
+    track(UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end))
+end
+
+local function clearContent()
+    for _, obj in ipairs(Content:GetChildren()) do
+        obj:Destroy()
+    end
+end
+
+local function button(name, callback, y)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -10, 0, 36)
+    b.Position = UDim2.fromOffset(5, y)
+    b.BackgroundColor3 = Color3.fromRGB(39, 43, 58)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Text = name
+    b.Font = Enum.Font.Gotham
+    b.TextSize = 13
+    b.Parent = Content
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    track(b.MouseButton1Click:Connect(callback))
+    return b
+end
+
+local function toggle(name, key, y)
+    local b
+    local function refresh()
+        b.Text = name .. ": " .. (Config[key] and "ON" or "OFF")
+        b.BackgroundColor3 = Config[key]
+            and Color3.fromRGB(25, 115, 85)
+            or Color3.fromRGB(39, 43, 58)
+    end
+    b = button(name, function()
+        Config[key] = not Config[key]
+        refresh()
+    end, y)
+    refresh()
+end
+
+local function slider(name, key, min, max, y)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 25)
+    label.Position = UDim2.fromOffset(5, y)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 13
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = Content
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -10, 0, 8)
+    bar.Position = UDim2.fromOffset(5, y + 30)
+    bar.BackgroundColor3 = Color3.fromRGB(48, 51, 66)
+    bar.Parent = Content
+    Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame")
+    fill.BackgroundColor3 = Config.ESPColor
+    fill.Size = UDim2.new(0, 0, 1, 0)
+    fill.Parent = bar
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("TextButton")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(0, 0, 0.5, 0)
+    knob.Text = ""
+    knob.BackgroundColor3 = Color3.new(1,1,1)
+    knob.Parent = bar
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local function update(value)
+        value = math.clamp(value, min, max)
+        Config[key] = math.floor(value)
+        local alpha = (value-min)/(max-min)
+        fill.Size = UDim2.new(alpha, 0, 1, 0)
+        knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+        label.Text = name .. ": " .. Config[key]
+    end
+
+    local function inputUpdate(input)
+        local alpha = math.clamp(
+            (input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
+            0, 1
+        )
+        update(min + alpha * (max-min))
+    end
+
+    track(knob.MouseButton1Down:Connect(function()
+        local move
+        move = track(UserInputService.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseMovement then
+                inputUpdate(input)
+            end
+        end))
+        local ended
+        ended = UserInputService.InputEnded:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                move:Disconnect()
+                ended:Disconnect()
+            end
+        end)
+    end))
+
+    track(bar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            inputUpdate(input)
+        end
+    end))
+
+    update(Config[key])
+end
+
+local function visuals()
+    clearContent()
+    toggle("Box ESP", "BoxESP", 5)
+    toggle("Name ESP", "NameESP", 48)
+    toggle("Distance ESP", "DistanceESP", 91)
+    toggle("Health ESP", "HealthESP", 134)
+    slider("Distância máxima", "MaxDistance", 50, 2000, 185)
+end
+
+local function settings()
+    clearContent()
+    slider("Fire Chance", "FireChance", 0, 100, 5)
+    slider("Smoothness", "Smoothness", 0, 100, 65)
+    slider("FOV", "FOV", 10, 360, 125)
+end
+
+local function tab(name, callback, y)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1, -10, 0, 36)
+    b.Position = UDim2.fromOffset(5, y)
+    b.BackgroundColor3 = Color3.fromRGB(39, 43, 58)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.Text = name
+    b.Font = Enum.Font.GothamBold
+    b.TextSize = 13
+    b.Parent = Sidebar
+    track(b.MouseButton1Click:Connect(callback))
+end
+
+tab("Visuais", visuals, 15)
+tab("Configurações", settings, 58)
+
+-- ESP de teste: somente personagens de treino
+local function makeESP(character)
+    if drawings[character] then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.FillTransparency = 1
+    highlight.OutlineColor = Config.ESPColor
+    highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+    highlight.Parent = character
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.fromOffset(150, 45)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = false
+    billboard.Parent = character:WaitForChild("Head", 5)
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.fromScale(1, 1)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.new(1,1,1)
+    textLabel.TextStrokeTransparency = 0
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextSize = 12
+    textLabel.Parent = billboard
+
+    drawings[character] = {
+        Highlight = highlight,
+        Label = textLabel,
+        Billboard = billboard
+    }
+end
+
+local function updateESP()
+    for character, objects in pairs(drawings) do
+        if not character.Parent then
+            objects.Highlight:Destroy()
+            objects.Billboard:Destroy()
+            drawings[character] = nil
+        else
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local root = character:FindFirstChild("HumanoidRootPart")
+            local head = character:FindFirstChild("Head")
+
+            local distance = root and Player.Character
+                and Player.Character:FindFirstChild("HumanoidRootPart")
+                and (root.Position - Player.Character.HumanoidRootPart.Position).Magnitude
+                or math.huge
+
+            local active = distance <= Config.MaxDistance
+            objects.Highlight.Enabled = Config.BoxESP and active
+            objects.Highlight.OutlineColor = Config.ESPColor
+            objects.Billboard.Enabled = active and
+                (Config.NameESP or Config.DistanceESP or Config.HealthESP)
+
+            if humanoid and root then
+                local parts = {}
+                if Config.NameESP then
+                    table.insert(parts, character.Name)
+                end
+                if Config.DistanceESP then
+                    table.insert(parts, math.floor(distance) .. " studs")
+                end
+                if Config.HealthESP then
+                    table.insert(parts, "HP: " .. math.floor(humanoid.Health))
+                end
+                objects.Label.Text = table.concat(parts, " | ")
+            end
+        end
+    end
+end
+
+-- Somente NPCs dentro de uma pasta chamada TrainingBots
+local function scanBots()
+    local folder = workspace:FindFirstChild("TrainingBots")
+    if not folder then return end
+
+    for _, character in ipairs(folder:GetChildren()) do
+        if character:IsA("Model") and character:FindFirstChild("Humanoid") then
+            makeESP(character)
+        end
+    end
+end
+
+track(RunService.Heartbeat:Connect(function()
+    if closed then return end
+    scanBots()
+    updateESP()
+end))
+
+-- Minimizar e restaurar
+track(Minimize.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    Sidebar.Visible = not minimized
+    Content.Visible = not minimized
+    Main.Size = minimized
+        and UDim2.fromOffset(560, 45)
+        or UDim2.fromOffset(560, 390)
+    Minimize.Text = minimized and "+" or "-"
+end))
+
+-- Fechar e limpar
+track(Close.MouseButton1Click:Connect(function()
+    closed = true
+    for _, connection in ipairs(connections) do
+        connection:Disconnect()
+    end
+    for _, objects in pairs(drawings) do
+        objects.Highlight:Destroy()
+        objects.Billboard:Destroy()
+    end
+    table.clear(drawings)
+    GUI:Destroy()
+end))
+
+visuals()
+
+Main.Size = UDim2.fromOffset(0, 0)
+TweenService:Create(
+    Main,
+    TweenInfo.new(0.45, Enum.EasingStyle.Back),
+    {Size = UDim2.fromOffset(560, 390)}
+):Play()
+
+print("AirFireGuns V2 carregado!")
